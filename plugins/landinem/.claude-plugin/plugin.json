@@ -1,7 +1,7 @@
 {
   "name": "landinem",
-  "version": "0.2.2",
-  "description": "Landinem en Claude Code",
+  "version": "0.3.0",
+  "description": "Landinem en Claude Code / Landinem in Claude Code",
   "author": {
     "name": "Landinem"
   },
@@ -16,20 +16,20 @@
   "userConfig": {
     "landinem_url": {
       "type": "string",
-      "title": "URL de Landinem",
-      "description": "URL de Landinem",
+      "title": "URL de Landinem / Landinem URL",
+      "description": "URL de Landinem / Landinem URL",
       "default": "https://landinem.com"
     },
     "mirror_tools": {
       "type": "boolean",
-      "title": "Reflejar herramientas",
-      "description": "Reflejar en Landinem el nombre de las herramientas que usa Claude Code",
+      "title": "Reflejar herramientas / Mirror tools",
+      "description": "Reflejar en Landinem el nombre de las herramientas que usa Claude Code / Show in Landinem the names of the tools Claude Code uses",
       "default": false
     },
     "remote_default": {
       "type": "boolean",
-      "title": "Arrancar en remoto",
-      "description": "Las sesiones nuevas empiezan en modo remoto: salen en Landinem tus prompts y todo el texto que Claude Code escribe en cada turno, nunca la entrada ni la salida de las tools, y se les puede escribir desde la web",
+      "title": "Arrancar en remoto / Start in remote mode",
+      "description": "Las sesiones nuevas empiezan en modo remoto: salen en Landinem tus prompts y todo el texto que Claude Code escribe en cada turno, nunca la entrada ni la salida de las tools, y se les puede escribir desde la web / New sessions start in remote mode: your prompts and all the text Claude Code writes in each turn show up in Landinem, never the input or output of the tools, and you can write to them from the web",
       "default": false
     }
   }

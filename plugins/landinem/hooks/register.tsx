@@ -15,8 +15,55 @@ type Action = "on" | "off" | "status";
 const status = atom({ plugin: "landinem", key: "status" } as const, null);
 
 const UNAVAILABLE: LandinemStatus = { mode: "local", connected: false, title: null, reason: "unavailable" };
-const USAGE = "Uso: /landinem [on|off|estado]";
-const NO_MCP = "sin conectar: abre /mcp y autentica plugin:landinem:landinem. Si no sale en la lista, quita o desactiva el otro MCP landinem y reinicia Claude Code";
+
+/** Los textos del mod en los dos idiomas; el de la sesión lo trae el estado (`locale`). */
+const TEXTS = {
+  es: {
+    usage: "Uso: /landinem [on|off|estado]",
+    argumentHint: "[on|off|estado]",
+    description: "Activa o desactiva el modo remoto de Landinem en esta sesión",
+    noMcp: "sin conectar: abre /mcp y autentica plugin:landinem:landinem. Si no sale en la lista, quita o desactiva el otro MCP landinem y reinicia Claude Code",
+    signIn: "Landinem: falta conectar la cuenta. Abre /mcp, elige landinem y pulsa Authenticate.",
+    revoked: "Landinem: este dispositivo está revocado. Abre /mcp, elige plugin:landinem:landinem y pulsa Authenticate para conectarlo de nuevo.",
+    failed: "Landinem: no se pudo cambiar el modo. Inténtalo de nuevo en unos segundos.",
+    local: "Landinem: sesión en local. Las tools siguen disponibles y no sale en Chats.",
+    waiting: (n: number) => (n === 1 ? "1 mensaje espera para llegar al chat y se envía solo" : `${n} mensajes esperan para llegar al chat y se envían solos`),
+    unreachable: (waiting: string) => `Landinem: sesión en remoto, pero Landinem no contesta: ${waiting} cuando vuelva.`,
+    remote: "Landinem: sesión en remoto. Sale en Chats y recibe mensajes de la web.",
+    bandRevoked: "dispositivo revocado: abre /mcp y pulsa Authenticate",
+    bandSignIn: "sin conectar: abre /mcp y pulsa Authenticate",
+    bandLocal: " local",
+    bandOffline: (n: number) => ` remoto, sin conexión (${n} sin enviar)`,
+    bandRemote: " remoto",
+    bandConnecting: " remoto, conectando",
+    toLocal: "Pasar a local",
+    toRemote: "Activar remoto",
+  },
+  en: {
+    usage: "Usage: /landinem [on|off|status]",
+    argumentHint: "[on|off|status]",
+    description: "Turn Landinem remote mode on or off for this session",
+    noMcp: "not connected: open /mcp and authenticate plugin:landinem:landinem. If it is not listed, remove or disable the other landinem MCP and restart Claude Code",
+    signIn: "Landinem: your account is not connected yet. Open /mcp, choose landinem and press Authenticate.",
+    revoked: "Landinem: this device has been revoked. Open /mcp, choose plugin:landinem:landinem and press Authenticate to connect it again.",
+    failed: "Landinem: the mode could not be changed. Try again in a few seconds.",
+    local: "Landinem: local session. The tools are still available and it does not show up in Chats.",
+    waiting: (n: number) => (n === 1 ? "1 message is waiting to reach the chat and will be sent on its own" : `${n} messages are waiting to reach the chat and will be sent on their own`),
+    unreachable: (waiting: string) => `Landinem: remote session, but Landinem is not responding: ${waiting} when it is back.`,
+    remote: "Landinem: remote session. It shows up in Chats and receives messages from the web.",
+    bandRevoked: "device revoked: open /mcp and press Authenticate",
+    bandSignIn: "not connected: open /mcp and press Authenticate",
+    bandLocal: " local",
+    bandOffline: (n: number) => ` remote, offline (${n} not sent)`,
+    bandRemote: " remote",
+    bandConnecting: " remote, connecting",
+    toLocal: "Switch to local",
+    toRemote: "Go remote",
+  },
+} as const;
+
+/** Sin idioma (un acompañante anterior o sin estado aún), español, como antes. */
+const textsOf = (s: LandinemStatus | null) => TEXTS[s?.locale ?? "es"];
 /** Los motivos que un refresco no borra: falta algo que la persona tiene que hacer. */
 const blocked = (s: LandinemStatus | null): boolean => s?.reason === "sign_in" || s?.reason === "no_mcp";
 
@@ -35,16 +82,14 @@ function parse(stdout: string): LandinemStatus | null {
  * la declaración del monitor: el prompt de sistema solo cambia en un hilo nuevo o tras compactar, y esta línea llega ya.
  */
 function textOf(s: LandinemStatus, switched: boolean): string {
-  if (s.reason === "sign_in") return "Landinem: falta conectar la cuenta. Abre /mcp, elige landinem y pulsa Authenticate.";
-  if (s.reason === "no_mcp") return `Landinem: ${NO_MCP}.`;
-  if (s.reason === "revoked") return "Landinem: este dispositivo está revocado. Abre /mcp, elige plugin:landinem:landinem y pulsa Authenticate para conectarlo de nuevo.";
-  if (s.reason) return "Landinem: no se pudo cambiar el modo. Inténtalo de nuevo en unos segundos.";
-  if (s.mode === "local") return "Landinem: sesión en local. Las tools siguen disponibles y no sale en Chats.";
-  if (s.pending) {
-    const waiting = s.pending === 1 ? "1 mensaje espera para llegar al chat y se envía solo" : `${s.pending} mensajes esperan para llegar al chat y se envían solos`;
-    return `Landinem: sesión en remoto, pero Landinem no contesta: ${waiting} cuando vuelva.`;
-  }
-  const line = "Landinem: sesión en remoto. Sale en Chats y recibe mensajes de la web.";
+  const t = textsOf(s);
+  if (s.reason === "sign_in") return t.signIn;
+  if (s.reason === "no_mcp") return `Landinem: ${t.noMcp}.`;
+  if (s.reason === "revoked") return t.revoked;
+  if (s.reason) return t.failed;
+  if (s.mode === "local") return t.local;
+  if (s.pending) return t.unreachable(t.waiting(s.pending));
+  const line = t.remote;
   return switched && typeof s.declaration === "string" ? `${line}\n\n${s.declaration}` : line;
 }
 
@@ -88,13 +133,13 @@ function arm($: EngineInterface): void {
 async function mount($: EngineInterface): Promise<void> {
   if (!(await $.session.surfaces()).includes("terminal")) return;
   arm($);
-  await companion($, "status", true);
+  const t = textsOf(await companion($, "status", true));
   // Si el nombre está cogido (otra skill o comando `landinem`) el registro falla: la banda y su botón siguen.
   try {
     await $.command.register({
       name: "landinem",
-      description: "Activa o desactiva el modo remoto de Landinem en esta sesión",
-      argumentHint: "[on|off|estado]",
+      description: t.description,
+      argumentHint: t.argumentHint,
     });
   } catch {
     // Sin comando.
@@ -118,7 +163,8 @@ export const register: Register = (on) => {
   on("command.run", { command: "landinem" }, async ($, e) => {
     arm($);
     const arg = e.args.trim();
-    if (arg !== "" && arg !== "on" && arg !== "off" && arg !== "estado") return { text: USAGE };
+    // `estado` y `status` valen en los dos idiomas.
+    if (arg !== "" && arg !== "on" && arg !== "off" && arg !== "estado" && arg !== "status") return { text: textsOf(await read($, status)).usage };
     const action = arg === "" ? await toggle($) : arg === "estado" ? "status" : arg;
     return { text: textOf(await companion($, action), action === "on") };
   });
@@ -137,22 +183,23 @@ export const register: Register = (on) => {
     const s = await read($, status);
     if (e.surface !== "terminal" || e.props.hasSurvey || s === null) return next(e);
     const { Box, Button, Text } = $.ui.resolve(e);
+    const t = textsOf(s);
     if (s.reason === "revoked")
       return (
         <Box>
-          <Text dimColor>Landinem  dispositivo revocado: abre /mcp y pulsa Authenticate</Text>
+          <Text dimColor>Landinem  {t.bandRevoked}</Text>
         </Box>
       );
     if (blocked(s))
       return (
         <Box>
-          <Text dimColor>Landinem  {s.reason === "no_mcp" ? NO_MCP : "sin conectar: abre /mcp y pulsa Authenticate"}</Text>
+          <Text dimColor>Landinem  {s.reason === "no_mcp" ? t.noMcp : t.bandSignIn}</Text>
         </Box>
       );
     const remote = s.mode === "remote";
     // Con espejos sin enviar, Landinem no contesta aunque el stream del monitor siga abierto.
     const live = remote && s.connected && !s.pending;
-    const label = !remote ? " local" : s.pending ? ` remoto, sin conexión (${s.pending} sin enviar)` : s.connected ? " remoto" : " remoto, conectando";
+    const label = !remote ? t.bandLocal : s.pending ? t.bandOffline(s.pending) : s.connected ? t.bandRemote : t.bandConnecting;
     return (
       <Box>
         <Text>
@@ -161,7 +208,7 @@ export const register: Register = (on) => {
           <Text dimColor>{label}</Text>
           {live && s.title ? `  ${s.title}` : ""}{" "}
         </Text>
-        <Button key="landinem-modo" label={remote ? "Pasar a local" : "Activar remoto"} onPress={async () => companion($, await toggle($))} />
+        <Button key="landinem-modo" label={remote ? t.toLocal : t.toRemote} onPress={async () => companion($, await toggle($))} />
       </Box>
     );
   });

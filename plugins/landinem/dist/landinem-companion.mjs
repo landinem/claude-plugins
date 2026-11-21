@@ -18097,6 +18097,16 @@ async function saveUrl(dataDir, url, { overwrite }) {
     await rm2(tmp, { force: true });
   }
 }
+var isPluginLocale = (value) => value === "es" || value === "en";
+var localePath = (dataDir) => join2(dataDir, "locale.json");
+async function saveLocale(dataDir, locale) {
+  if (isPluginLocale(locale)) await writeJson(localePath(dataDir), { locale }, 384);
+}
+var envLocale = (env) => /^es/i.test(env.LC_ALL || env.LC_MESSAGES || env.LANG || "") ? "es" : "en";
+async function localeOf(dataDir, env) {
+  const saved = (await readJson(localePath(dataDir)))?.locale;
+  return isPluginLocale(saved) ? saved : envLocale(env);
+}
 async function savedUrl(dataDir) {
   const url = (await readJson(join2(dataDir, "config.json")))?.url;
   return typeof url === "string" && url !== "" ? url : null;
@@ -18431,7 +18441,7 @@ async function remoteSince(dataDir, processKey2) {
   return raw?.remote === true && typeof raw.since === "number" && Number.isFinite(raw.since) ? raw.since : null;
 }
 var unboundReason = async (dataDir, processKey2) => await readJson(headersBeatPath(dataDir, processKey2)) ? "sign_in" : "no_mcp";
-async function statusOf({ dataDir, processKey: processKey2, title }) {
+async function statusOf({ dataDir, processKey: processKey2, title }, env) {
   const at = (await readJson(monitorBeatPath(dataDir, processKey2)))?.at;
   const mark = await readMark(dataDir, processKey2);
   const remote = mark?.remote === true;
@@ -18444,6 +18454,7 @@ async function statusOf({ dataDir, processKey: processKey2, title }) {
     mode: remote ? "remote" : "local",
     connected,
     title,
+    locale: await localeOf(dataDir, env),
     ...pending ? { pending } : {},
     ...remote ? { declaration: MONITOR_DECLARATION } : {},
     ...reason ? { reason } : {}
@@ -18451,7 +18462,7 @@ async function statusOf({ dataDir, processKey: processKey2, title }) {
 }
 async function runRemote(action, { claudeSessionId, env, home }) {
   const pointer = await readPointer(claudeSessionId, home).catch(() => null);
-  if (!pointer) return { mode: "local", connected: false, title: null, reason: "no_session" };
+  if (!pointer) return { mode: "local", connected: false, title: null, reason: "no_session", locale: envLocale(env) };
   const { dataDir, processKey: processKey2, title, cwd } = pointer;
   const session = async (body) => {
     const url = await hookUrlOf(dataDir, env);
@@ -18475,13 +18486,13 @@ async function runRemote(action, { claudeSessionId, env, home }) {
   try {
     await flush();
     if (action === "on") {
-      if (!await readJson(headersBeatPath(dataDir, processKey2))) return { ...await statusOf(pointer), reason: "no_mcp" };
+      if (!await readJson(headersBeatPath(dataDir, processKey2))) return { ...await statusOf(pointer, env), reason: "no_mcp" };
       try {
         await session({ event: "start", source: "startup", ...title ? { title } : {}, ...cwd ? { cwd } : {} });
       } catch (error2) {
         await logFailure(dataDir, `remote-on ${failureOf(error2)}`);
         const reason = error2 instanceof ApiError && error2.code === "PUSH_KEY_INVALID" ? "sign_in" : "unavailable";
-        return { ...await statusOf(pointer), reason };
+        return { ...await statusOf(pointer, env), reason };
       }
       try {
         await setRemote(dataDir, processKey2, true);
@@ -18489,7 +18500,7 @@ async function runRemote(action, { claudeSessionId, env, home }) {
         await end(claudeSessionId, "remote-on-end");
         throw error2;
       }
-      return await statusOf(pointer);
+      return await statusOf(pointer, env);
     }
     if (action === "status" && await isRemote(dataDir, processKey2) && await outboxCount(dataDir, processKey2)) {
       const url = await hookUrlOf(dataDir, env);
@@ -18499,10 +18510,10 @@ async function runRemote(action, { claudeSessionId, env, home }) {
       await setRemote(dataDir, processKey2, false);
       if (!await end(claudeSessionId, "remote-off")) await setRemote(dataDir, processKey2, false, { pendingEnd: claudeSessionId });
     }
-    return await statusOf(pointer);
+    return await statusOf(pointer, env);
   } catch (error2) {
     await logFailure(dataDir, `remote-${action} ${failureOf(error2)}`);
-    return { ...await statusOf(pointer), reason: "unavailable" };
+    return { ...await statusOf(pointer, env), reason: "unavailable" };
   }
 }
 
@@ -19186,7 +19197,9 @@ async function sessionStart(deps, input, claudeSessionId) {
       }
       throw error2;
     }
-    return (await api.get("/hook/context", target)).markdown;
+    const context = await api.get("/hook/context", target);
+    await saveLocale(deps.dataDir, context.locale).catch(() => logFailure(deps.dataDir, "session-start idioma"));
+    return context.markdown;
   };
   try {
     return startOutput(await Promise.race([work(), deadline]));

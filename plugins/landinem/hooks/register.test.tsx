@@ -2,7 +2,7 @@ import type { On } from "claude-code";
 import { expect, mock, test } from "claude-code/testing";
 import type { Engine } from "claude-code/testing";
 
-type Reply = { mode: "local" | "remote"; connected: boolean; title: string | null; reason?: string; declaration?: string; pending?: number };
+type Reply = { mode: "local" | "remote"; connected: boolean; title: string | null; reason?: string; declaration?: string; pending?: number; locale?: "es" | "en" };
 
 const SESSION = "0b6f2d3e-sesion";
 const BAND = {
@@ -22,10 +22,14 @@ const BAND = {
 /** El motor bajo el mod: sesión, comando y un acompañante de mentira que anota cada `argv`. */
 function engine(on: On, answer: (action: string) => Reply | "fail" | "deny" | "garbage", surfaces: Array<"terminal" | "desktop"> = ["terminal"], nameTaken = false) {
   const calls: string[][] = [];
+  const registered: unknown[] = [];
   const clock = mock.clock(on);
   on("session.surfaces", () => ({ value: surfaces }));
   on("session.id", () => ({ value: SESSION }));
-  on("command.register", () => (nameTaken ? { deny: "nombre cogido" } : { value: { command: "landinem" } }));
+  on("command.register", (_, e) => {
+    registered.push(e);
+    return nameTaken ? { deny: "nombre cogido" } : { value: { command: "landinem" } };
+  });
   on("session.start", (_, e) => ({ cwd: e.cwd }));
   on("prompt.compose", () => ({ sections: [{ id: "intro", text: "INTRO", scope: "shared" }] }));
   on("process.run", (_, e) => {
@@ -37,7 +41,7 @@ function engine(on: On, answer: (action: string) => Reply | "fail" | "deny" | "g
     if (reply === "garbage") return { value: { ...out, exitCode: 0, stdout: "{not json\n[1,2]\n" } };
     return { value: { ...out, exitCode: 0, stdout: `aviso\n${JSON.stringify(reply)}\n` } };
   });
-  return { calls, clock };
+  return { calls, clock, registered };
 }
 
 /** El acompañante con estado: `on` pasa a remoto conectado, `off` a local; en remoto trae la declaración. */
@@ -60,6 +64,32 @@ const declared = async ($: Engine) => (await compose($)).sections.filter((sec) =
 const start = ($: Engine) => $.session.start({ cwd: "/", surface: "terminal", isInteractive: true });
 const landinem = async ($: Engine, args: string) =>
   (await $.command.run({ command: "landinem", args, origin: { kind: "composer" }, presentation: { layout: "main", columns: 80 } } as never)).text;
+
+test("con la cuenta en inglés, la banda, el botón, el comando y sus respuestas salen en inglés", async ($, on) => {
+  const { registered } = engine(on, (action) => {
+    const reply = companion()(action);
+    return { ...reply, locale: "en" as const, ...(action === "on" ? { mode: "remote" as const, connected: true, title: "t", declaration: "DECLARACION" } : {}) };
+  });
+  await start($);
+  expect(registered).toContainEqual(expect.objectContaining({ description: "Turn Landinem remote mode on or off for this session", argumentHint: "[on|off|status]" }));
+  const ui = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(await ui.find({ type: "Button", text: "Go remote" })).toBeDefined();
+  await ui.unmount();
+  expect(await landinem($, "status")).toBe("Landinem: local session. The tools are still available and it does not show up in Chats.");
+  expect(await landinem($, "x")).toBe("Usage: /landinem [on|off|status]");
+  expect(await landinem($, "on")).toBe("Landinem: remote session. It shows up in Chats and receives messages from the web.\n\nDECLARACION");
+  const remote = await $.ui.mount({ ...BAND, surface: "terminal" });
+  expect(await remote.find({ type: "Text", text: /● remote/ })).toBeDefined();
+  expect(await remote.find({ type: "Button", text: "Switch to local" })).toBeDefined();
+  await remote.unmount();
+});
+
+test("con la cuenta en español, /landinem status también pide el estado", async ($, on) => {
+  const { calls } = engine(on, (action) => ({ ...companion()(action), locale: "es" }));
+  await start($);
+  expect(await landinem($, "status")).toBe("Landinem: sesión en local. Las tools siguen disponibles y no sale en Chats.");
+  expect(calls.map((argv) => argv[3])).toEqual(["status", "status"]);
+});
 
 test("al cargar pide el estado y la banda dice local con Activar remoto", async ($, on) => {
   const { calls } = engine(on, companion());
