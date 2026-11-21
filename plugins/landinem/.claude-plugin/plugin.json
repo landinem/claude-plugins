@@ -1,0 +1,36 @@
+{
+  "name": "landinem",
+  "version": "0.2.2",
+  "description": "Landinem en Claude Code",
+  "author": {
+    "name": "Landinem"
+  },
+  "privacyPolicyUrl": "https://landinem.com/privacidad",
+  "types": "./types/index.d.ts",
+  "channels": [
+    {
+      "server": "landinem-channel",
+      "displayName": "Landinem"
+    }
+  ],
+  "userConfig": {
+    "landinem_url": {
+      "type": "string",
+      "title": "URL de Landinem",
+      "description": "URL de Landinem",
+      "default": "https://landinem.com"
+    },
+    "mirror_tools": {
+      "type": "boolean",
+      "title": "Reflejar herramientas",
+      "description": "Reflejar en Landinem el nombre de las herramientas que usa Claude Code",
+      "default": false
+    },
+    "remote_default": {
+      "type": "boolean",
+      "title": "Arrancar en remoto",
+      "description": "Las sesiones nuevas empiezan en modo remoto: salen en Landinem tus prompts y todo el texto que Claude Code escribe en cada turno, nunca la entrada ni la salida de las tools, y se les puede escribir desde la web",
+      "default": false
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "landinem",
+  "owner": {
+    "name": "Landinem"
+  },
+  "plugins": [
+    {
+      "name": "landinem",
+      "source": "./plugins/landinem",
+      "description": "Landinem en Claude Code",
+      "version": "0.2.2"
+    }
+  ]
+}

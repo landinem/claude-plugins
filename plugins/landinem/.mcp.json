@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "landinem": {
+      "type": "http",
+      "url": "${user_config.landinem_url}/api/v1/mcp",
+      "headersHelper": "node \"${CLAUDE_PLUGIN_ROOT}/dist/landinem-companion.mjs\" headers \"${CLAUDE_PLUGIN_DATA}\"",
+      "timeout": 900000
+    },
+    "landinem-channel": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/landinem-companion.mjs", "channel", "${CLAUDE_PLUGIN_DATA}"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "name": "landinem",
+    "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/landinem-companion.mjs\" monitor \"${CLAUDE_PLUGIN_DATA}\"",
+    "description": "Landinem",
+    "when": "always"
+  }
+]
